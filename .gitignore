@@ -1,0 +1,42 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+.*/
+
+# Logs
+*.log
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crx
+
+# Personal documents (avoid accidental commits)
+*.pdf
+*.doc
+*.docx
+*.rtf
+
+# Dependencies (if any)
+node_modules/
+
+# Build output
+dist/
+build/
+debug-logs/
+
+# Temporary files
+*.tmp
+*.temp

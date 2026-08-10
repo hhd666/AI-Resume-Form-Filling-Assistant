@@ -1,0 +1,563 @@
+/* ─── Page Shell ─────────────────────────────────────────────────────────── */
+body.resume-editor-page {
+  background: #f8f8fa;
+  min-height: 100vh;
+}
+
+.editor-shell {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 32px 28px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ─── Header ─────────────────────────────────────────────────────────────── */
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.editor-header-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.editor-header .logo-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+
+.editor-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.editor-header-copy h1 {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--text-main);
+}
+
+.editor-header-copy p {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.editor-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+/* ─── Status Bar ─────────────────────────────────────────────────────────── */
+#pageStatus {
+  padding: 11px 16px;
+  border-radius: var(--radius-md);
+  border: none;
+  border-left: 3px solid var(--border);
+  background: #f4f4f5;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  transition: border-color 0.25s, background 0.25s, color 0.25s;
+}
+
+#pageStatus[style*="rgba(16,185,129"] {
+  background: #f0fdf8;
+  color: #065f46;
+  border-left-color: var(--success);
+}
+
+#pageStatus[style*="rgba(239,68,68"] {
+  background: #fff5f5;
+  color: #991b1b;
+  border-left-color: var(--danger);
+}
+
+#pageStatus[style*="rgba(245,158,11"] {
+  background: #fffbeb;
+  color: #92400e;
+  border-left-color: var(--warning);
+}
+
+/* ─── Main Layout ────────────────────────────────────────────────────────── */
+.editor-main {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* 宽页面布局：导航悬浮在顶部（sticky），只有下方内容滚动 */
+/* align-items: stretch 覆盖 popup.css .resume-editor-layout 的 start，
+   保证下方内容宽度自适应占满容器 */
+.resume-editor-layout-wide {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: stretch;
+  width: 100%;
+}
+
+/* 顶部悬浮导航占位：滚动定位 section 时留出导航高度 */
+.resume-editor-layout-wide .resume-section {
+  scroll-margin-top: 84px;
+}
+
+/* ─── Top Nav（悬浮顶部） ────────────────────────────────────────────────── */
+.resume-nav {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  align-self: stretch;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(6px);
+}
+
+.resume-nav-btn {
+  width: auto;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  padding: 7px 12px 6px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font: inherit;
+  color: inherit;
+  transition: all 0.15s ease;
+  flex: 0 0 auto;
+}
+
+.resume-nav-btn:hover {
+  background: rgba(0,0,0,0.04);
+  border-color: var(--border);
+}
+
+.resume-nav-btn.has-value .resume-nav-label {
+  color: var(--text-main);
+}
+
+.resume-nav-btn.is-expanded {
+  background: #ffffff;
+  border-color: var(--border);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+}
+
+.resume-nav-btn.is-expanded .resume-nav-label {
+  color: var(--text-main);
+}
+
+.resume-nav-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.resume-nav-meta {
+  font-size: 11px;
+  color: var(--text-light);
+  line-height: 1.3;
+}
+
+/* ─── Form Host ──────────────────────────────────────────────────────────── */
+.resume-form-host {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ─── Section Cards ──────────────────────────────────────────────────────── */
+.resume-section {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: box-shadow 0.2s;
+}
+
+.resume-section:focus-within {
+  box-shadow: 0 0 0 2px rgba(24,24,27,0.08), 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.resume-section.is-collapsed .resume-section-body {
+  display: none;
+}
+
+.resume-section-head {
+  padding: 13px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resume-section.is-collapsed .resume-section-head {
+  border-bottom: none;
+  background: transparent;
+}
+
+.resume-section-head-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  background: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.resume-section-toggle-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+  font-size: 11px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--border);
+  transition: transform 0.2s ease, background 0.15s;
+}
+
+.resume-section:not(.is-collapsed) .resume-section-toggle-icon {
+  transform: rotate(90deg);
+  background: var(--text-main);
+  color: #fff;
+}
+
+.resume-section-heading {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.resume-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.resume-section-summary {
+  font-size: 11px;
+  color: var(--text-light);
+  line-height: 1.4;
+}
+
+.resume-section-actions {
+  flex-shrink: 0;
+}
+
+.resume-section-note {
+  padding-left: 26px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.resume-section-body {
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ─── Field Grid ─────────────────────────────────────────────────────────── */
+.resume-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px 20px;
+}
+
+.resume-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Full-width for textarea fields */
+.resume-field:has(.resume-textarea) {
+  grid-column: 1 / -1;
+}
+
+.resume-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* label 行：字段名 + 转写按钮 */
+.resume-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.resume-transcribe-btn {
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg-subtle, #f5f5f5);
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.resume-transcribe-btn:hover {
+  background: var(--primary, #1677ff);
+  border-color: var(--primary, #1677ff);
+  color: #fff;
+}
+.resume-transcribe-btn.ok {
+  background: #52c41a;
+  border-color: #52c41a;
+  color: #fff;
+}
+.resume-transcribe-btn.fail {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+  color: #fff;
+}
+
+.resume-input,
+.resume-select,
+.resume-textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-main);
+  background: #ffffff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.resume-textarea {
+  min-height: 88px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.resume-input:hover,
+.resume-select:hover,
+.resume-textarea:hover {
+  border-color: #a1a1aa;
+}
+
+.resume-input:focus,
+.resume-select:focus,
+.resume-textarea:focus {
+  outline: none;
+  border-color: var(--text-main);
+  box-shadow: 0 0 0 2px rgba(24,24,27,0.1);
+}
+
+/* ─── List Slots ─────────────────────────────────────────────────────────── */
+.resume-slot {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fafafa;
+}
+
+.resume-slot-head-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.resume-slot-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.resume-slot-subtitle {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-light);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+.resume-slot-remove {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--danger);
+  opacity: 0.7;
+  padding: 0;
+}
+
+.resume-slot-remove:hover {
+  opacity: 1;
+  color: var(--danger);
+}
+
+/* ─── Import Section ─────────────────────────────────────────────────────── */
+.editor-import-section {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.editor-import-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: #fafafa;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-import-header-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: var(--primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.editor-import-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.editor-import-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.editor-import-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.editor-import-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .editor-shell {
+    padding: 20px 16px 48px;
+    gap: 20px;
+  }
+
+  .editor-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .editor-toolbar {
+    width: 100%;
+  }
+
+  .editor-toolbar .btn {
+    flex: 1;
+  }
+
+  .resume-editor-layout-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-nav {
+    /* 保持顶部悬浮，仅调整按钮排布 */
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .resume-nav-btn {
+    flex: 0 0 auto;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+  }
+
+  .resume-nav-meta {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .resume-fields-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .resume-field:has(.resume-textarea) {
+    grid-column: auto;
+  }
+}
