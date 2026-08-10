@@ -172,6 +172,7 @@
               : "未识别到可填写字段，请确认当前页面包含表单",
         };
       }
+      console.log("resumeProfile:", scan.fields, resumeProfile);
 
       const cacheSignature = createMappingCacheSignature(scan.fields);
       const cacheKey = createMappingCacheKeyFromSignature(cacheSignature);
@@ -194,7 +195,7 @@
           "info",
           `已识别 ${lastFieldCount} 个字段，正在调用 AI 建立字段映射...`
         );
-        // console.log("resumeProfile:", scan.fields, resumeProfile);
+        
 
         const promptPayload = buildFieldMappingPayload(scan.fields, resumeProfile);
         console.log("[简历填表助手] AI 映射请求 - 模型:", config.model, "baseUrl:", config.baseUrl);
@@ -400,7 +401,10 @@
     fields.forEach(f => {
       if (f.fieldId) {
         // 给重复的label加上序号标识
-        const label = `${f.label}+${f.context}`;
+        let label = `${f.label}+${f?.context}+${f?.sectionEvidence}+${f?.sectionLabel}`;
+        f?.nearbyLabels.forEach(nbLabel => {
+          label += `+${nbLabel}`;
+        });
         fieldMap[`${f.fieldId}`] = label;
         // if (fieldMap[f.fieldId]) {
         // // 如果已存在，追加标识
@@ -1512,7 +1516,7 @@
   // 填写元素控件
   async function doFillOne(runtime, value) {
     if (!runtime) return { filled: false, message: "字段不存在" };
-    // console.log(runtime.el,"rekind",runtime.kind,"path",runtime.resumePath,String(runtime.resumePath).includes("Date"));
+    console.log(runtime.el, "rekind", runtime.kind, "path", runtime.resumePath);
     if (runtime.kind === "file") {
       return { filled: false, message: "文件上传字段无法自动填写" };
     }
@@ -1597,11 +1601,10 @@
     if (!desired) return { filled: false, message: "没有可填写内容" };
 
 
-    console.log("fill", String(runtime.resumePath).includes("Date"), isPhoenixLike(runtime.el))
-    // Phoenix控件通用适配
+    // Phoenix日期控件通用适配
     if (String(runtime.resumePath).includes("Date") && isPhoenixLike(runtime.el)) {
       const ok = await fillPhSelect(runtime, desired);
-      await sleep(500);
+      await sleep(200);
       if (ok) return { filled: true };
     }
 
@@ -1618,20 +1621,16 @@
     }
 
     // 通用控件适配（所有网站，不依赖特定框架 class）：
-    // 遍历 input 自身及其兄弟/父元素，找到绑定了 click 激活能力的容器先点击；
-    // 点击后若弹出选择面板则从面板中选值（自动分辨年/月/日）；
-    // 否则直接写值并触发 invalid 事件确认（有 invalid 监听的自定义控件才认可输入）。
-    // atsx 控件是专用适配（面板注入页面末尾），必须排除，防止被通用逻辑覆盖。
-    // 日期字段暂不走通用激活（只保留适配平台 + 普通写值），见 isDateLikeField。
-    // if (// 暂时废弃
-    //   !isDateLikeField(runtime) &&
-    //   !isAtsxControl(runtime.el) &&
-    //   findClickActivator(runtime.el)
-    // ) {
-    //   const ok = await fillGeneric(runtime, desired);
-    //   if (ok) return { filled: true };
-    // }
-
+    if (// 暂时废弃
+      // !isDateLikeField(runtime) &&
+      // !isAtsxControl(runtime.el) &&
+      findClickActivator(runtime.el)
+    ) {
+      console.log("通用激活控件：", runtime.el);
+      const ok = await fillGeneric(runtime, desired);
+      if (ok) return { filled: true };
+    }
+    console.log("正常输入控件：", runtime.el);
     const ok = await setValueWithEvents(runtime.el, desired, runtime);
     return ok ? { filled: true } : { filled: false, message: "写入失败" };
   }
@@ -1673,6 +1672,60 @@
     }
   }
 
+  function setReactInputValue(inputEl, newText) {
+    //1. 聚焦元素（模拟用户点击）
+    inputEl.focus();
+    //2. 使用setter方式修改值
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(inputEl, newText);
+    //3. 创建并触发input事件（让React检测到变化）
+    const inputEvent = new Event('input', { bubbles: true, cancelable: true });
+    inputEl.dispatchEvent(inputEvent);
+    //4. 创建并触发change事件（确保所有监听器触发）
+    const changeEvent = new Event('change', { bubbles: true });
+    inputEl.dispatchEvent(changeEvent);
+    //5. 移除焦点（模拟用户完成操作）
+    inputEl.blur();
+  }
+
+  function setReactTextareaValue(textarea, newValue) {
+    // 1. 获取React Fiber节点和Props
+    const keys = Object.keys(textarea);
+    const fiberKey = keys.find(key => key.startsWith('__reactFiber$'));
+    const propsKey = keys.find(key => key.startsWith('__reactProps$'));
+    // 2. 使用React Fiber的更新机制
+    if (fiberKey && propsKey) {
+      const fiberNode = textarea[fiberKey];
+      const reactProps = textarea[propsKey];
+      // 获取状态更新函数
+      const updater = fiberNode.return?.memoizedProps?.onChange ||
+        fiberNode.return?.pendingProps?.onChange ||
+        reactProps?.onChange;
+      if (updater) {
+        // 使用原生setter设置值
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+          HTMLTextAreaElement.prototype,
+          'value'
+        ).set;
+        nativeInputValueSetter.call(textarea, newValue);
+        // 创建完整事件对象
+        const event = new Event('input', {
+          bubbles: true,
+          cancelable: true,
+          composed: true
+        });
+        // 设置事件的目标
+        Object.defineProperties(event, {
+          target: { value: textarea, enumerable: true },
+          currentTarget: { value: textarea, enumerable: true }
+        });
+        // 触发React的状态更新
+        updater(event);
+        return;
+      }
+    }
+    throw new Error('获取React Fiber节点失败');
+  }
+
   async function setValueWithEvents(el, value, runtime = null) {
     if (!el) return false;
 
@@ -1705,12 +1758,14 @@
         el.readOnly = false;
         el.removeAttribute("readonly");
       }
+      el.click?.();
       setValueRealistic(el, value);
 
       // Moka sd-Input：input 上的 invalid 事件承载了组件的“真实输入”确认逻辑，
       // 填值后触发 invalid（并执行约束校验），让组件把脚本写入的值同步为内部 state。
-      if (isMoka) {
+      if (1) {// 无论是谁，都尝试调用invalid
         dispatchInvalidEvent(el);
+        
       }
 
       el.blur?.();
@@ -2490,6 +2545,7 @@
         new Event("invalid", { bubbles: true, cancelable: true })
       );
     } catch (_) {
+      console.log("元素没有invild", el)
       // Ignore.
     }
     try {
@@ -2562,12 +2618,12 @@
     // 8. 选择月份
     var monthCells = monthPanel.querySelectorAll('.phoenix-calendar-month-panel-cell');
     var targetMonthText = month + '月';
-    console.log("目标月份:",targetMonthText)
+    console.log("目标月份:", targetMonthText)
     for (var i = 0; i < monthCells.length; i++) {
       var monthLink = monthCells[i].querySelector('.phoenix-calendar-month-panel-month');
       if (monthLink && monthLink.textContent.trim() === targetMonthText) {
         monthLink.click();
-        await sleep(500);
+        await sleep(100);
         break;
       }
     }
@@ -2622,7 +2678,7 @@
     var dateMap = { y: year, m: month, d: day, string: text };
     el.focus();
     el.click();
-    console.log("ph年月日结果", el,dateMap);
+    console.log("ph年月日结果", el, dateMap);
     await sleep(200);
     await selectPhoenixRuntime(dateMap);
     return true;
@@ -3276,6 +3332,7 @@
       // Ignore.
     }
 
+
     // 模拟真实键盘输入：focus + 全选 + insertText，触发浏览器原生输入链
     // （keydown/beforeinput/input(InputEvent)/composition），
     // 让只认真实输入的框架/组件（如受控组件校验 inputType、composition 处理等）更新内部 state。
@@ -3283,6 +3340,7 @@
     try {
       el.focus?.();
       el.select?.();
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       if (typeof document.execCommand === "function") {
         typed = document.execCommand("insertText", false, String(value));
       }
@@ -3306,6 +3364,7 @@
         // Ignore.
       }
     }
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     return true;
   }

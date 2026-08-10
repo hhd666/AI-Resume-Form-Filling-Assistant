@@ -2,6 +2,7 @@
 
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
+const thinkText = document.getElementById("thinkingTimeText");
 var aiThinkingSec=0
 
 // 常驻监听：任何来源的 AI 请求（自动填充的字段映射、宽页面导入等）
@@ -10,7 +11,7 @@ var aiThinkingSec=0
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type !== "aiThinking") return;
   const seconds = Math.max(1, Math.floor((message.elapsedMs || 0) / 1000));
-  statusText.textContent = `AI 思考中 ${seconds}s`;
+  thinkText.textContent = `思考时长 ${seconds}s`;
 });
 
 const tabsEl = document.getElementById("tabs");
