@@ -51,20 +51,21 @@ async function callAI(config, prompt, mode) {
 
 你将收到一个 JSON，包含：
 - fields：当前页面识别到的表单字段
-- fields 中的单个 field的键为fieldid，其对应值为其文字说明
+- fields 中的单个 field的键为fieldid，其对应值的格式为Array"[label,placeholder,sectionLabel,[nearbyLabels1,nearbyLabels2]]"(标签，输入提示，关联标签，[邻居元素])
 - resumeFields：预先定义好的标准简历字段目录，key是映射路径(Path)，value是其内容
 
 你的任务：
 1) 为每个页面 field 选择最合适的 resumePath
 2) 只做“字段映射”，不要生成最终填写值
-3) 若字段需要简单转换，可返回 transform
+3) 若字段需要简单转换，可返回 transform，如某个元素只需要输入年或月，则转换为"year" or "month"
 4) 若没有合适字段，resumePath 返回空字符串
 5) 只输出 JSON（不要输出其它文本，不要 Markdown 代码块）
 
 映射原则：
 1) 对同一区块内重复出现的“起止时间”字段，通常前一个映射开始时间，后一个映射结束时间
-2）fields中的值的格式以+号连接（例如：”请输入+必填+项目名称+项目经历+必填+项目名称+职务+职务必填”），第4个关键词之后表示与此字段相邻的元素（可能是本字段的，也可能是相邻字段的），但一定是从近到远来排列（即最近的可能就是本字段，你要和后面的字段对比来确定）
-
+2) “起止时间”字段可能被划分为年、月，有时连续出现四个起止时间，就说明是开始时间年、开始时间月、结束时间年、结束时间月
+3) 当出现2)所描述的年月划分情况，必须在输出结果中携带"transform": "month"或"year"
+4) 时间类信息可能不明确说明是项目/教育/实习经历的时间，但一定出现在项目/实习经历/教育经历中间，它附近可能有项目描述/学校等关联信息，这类时间可以按照就近映射的路径来参考
 
 校招场景优先级：
 1) 含”实习””实习经历””实习公司””实习岗位”等语义时，优先映射到 internships.*，不要优先映射到 workExperiences.*
@@ -85,6 +86,7 @@ async function callAI(config, prompt, mode) {
     {
       "fieldId": "f_1",
       "resumePath": "personal.email",
+      "transform": "month"(可选，有才输出)
     }
   ]
 }

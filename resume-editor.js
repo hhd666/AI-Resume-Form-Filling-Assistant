@@ -83,6 +83,15 @@ function initResumeEditorEvents() {
         removeBtn.dataset.sectionRemove,
         Number(removeBtn.dataset.itemIndex)
       );
+      return;
+    }
+
+    const copyBtn = event.target.closest("[data-slot-copy]");
+    if (copyBtn) {
+      const slotEl = copyBtn.closest(".resume-slot");
+      if (slotEl) {
+        copySlotValuesToClipboard(slotEl, copyBtn);
+      }
     }
   });
 }
@@ -276,6 +285,14 @@ function renderResumeEditor(profile) {
                 `映射路径：${section.key}.${slotIndex}.*`
               )}</div>
             </div>
+            <button
+              type="button"
+              class="btn-text resume-slot-copy"
+              data-slot-copy="${escapeHtml(section.key)}.${slotIndex}"
+              title="把本条所有已填字段按顺序逐个复制到剪贴板（纯值）"
+            >
+              复制
+            </button>
             ${
               items.length > Math.max(1, Number(section.initialItems) || 1)
                 ? `
@@ -428,6 +445,37 @@ async function copyToClipboard(text) {
     return ok;
   } catch (_) {
     return false;
+  }
+}
+
+// 复制：把某个 resume-slot 下所有有值的字段，按字段顺序逐个复制到剪贴板（纯值），间隔 50ms。
+async function copySlotValuesToClipboard(slotEl, btnEl) {
+  const controls = Array.from(
+    slotEl.querySelectorAll("[data-resume-path]")
+  ).filter((control) => String(control.value ?? "").trim());
+  console.log(controls);
+  if (controls.length === 0) {
+    flashTranscribeBtn(btnEl, "无内容", false);
+    return;
+  }
+
+  btnEl.disabled = true;
+  try {
+    for (let index = 0; index < controls.length; index += 1) {
+      console.log(String(controls[index].value));
+      const ok = await copyToClipboard(String(controls[index].value).trim());
+      if (!ok) {
+        console.warn("复制失败",controls[index])
+        flashTranscribeBtn(btnEl, "复制失败", false);
+        return;
+      }
+      if (index < controls.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
+    flashTranscribeBtn(btnEl, "已完成 ✓", true);
+  } finally {
+    btnEl.disabled = false;
   }
 }
 

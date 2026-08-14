@@ -188,15 +188,16 @@
       if (cachedEntry?.mappings?.length) {
         mappings = cachedEntry.mappings;
         cacheHit = true;
+        console.log("命中本地缓存:", mappings);
         sendLog("info", "已命中本地字段映射缓存，跳过模型调用。");
-      } else {
+      } else {// 无本地缓存
         sendLog("info", `[缓存] 未命中 reason="${cacheLookup.reason || "未知原因"}"`);
         sendLog(
           "info",
           `已识别 ${lastFieldCount} 个字段，正在调用 AI 建立字段映射...`
         );
-        
 
+        // 在这里构建ai映射
         const promptPayload = buildFieldMappingPayload(scan.fields, resumeProfile);
         console.log("[简历填表助手] AI 映射请求 - 模型:", config.model, "baseUrl:", config.baseUrl);
         const payloadJson = JSON.stringify(promptPayload, null, 2);
@@ -226,16 +227,19 @@
         mappingById.set(String(mapping.fieldId), mapping);
       }
 
-      // 把映射路径附加到 runtime，供 isDateLikeField 判断日期字段
+      // 在这里，把映射路径附加到 runtime，供 isDateLikeField 判断日期字段
       // （路径以 .date 结尾 = 日期控件）。
       for (const field of scan.fields) {
         const runtime = fieldRuntimeMap.get(field.fieldId);
         const mapping = mappingById.get(field.fieldId);
         if (runtime && mapping?.resumePath) {
           runtime.resumePath = mapping.resumePath;
+          if (isDateLikeField(runtime) && runtime?.kind == "text") {
+            runtime.kind = "date";
+          }
         }
       }
-
+      // 输出诊断结果
       for (const field of scan.fields) {
         const mapping = mappingById.get(field.fieldId) || {
           fieldId: field.fieldId,
@@ -274,9 +278,10 @@
         const bDate = isDateLikeField(fieldRuntimeMap.get(b.fieldId)) ? 1 : 0;
         return aDate - bDate;
       });
-
+      // 在这里，所有元素填写大便利
       for (const field of orderedFields) {
         const mapping = mappingById.get(field.fieldId);
+        // console.log("mapping 284",mapping);
         if (!mapping?.resumePath) {
           sendLog(
             "warning",
@@ -290,8 +295,10 @@
           );
           continue;
         }
+        // 开始填写
+        var runtime = fieldRuntimeMap.get(field.fieldId);
 
-        const runtime = fieldRuntimeMap.get(field.fieldId);
+
         // atsx 起止时间：防止 begin/end 映射反了导致填反。
         // 若 begin 字段映射到 end 类路径（或反之），跳过该字段并警告。
         if (
@@ -311,6 +318,7 @@
           );
           continue;
         }
+        // 增量模式检查
         if (fillMode === "incremental" && hasExistingFieldValue(runtime)) {
           sendLog(
             "warning",
@@ -346,10 +354,26 @@
           );
           continue;
         }
+        // 调试仅日期
+        // if (!mapping?.resumePath.includes("Date")) {
+        //   continue;
+        // }
+        if (typeof mapping?.transform === "string" && runtime) {
+          const transform = mapping.transform;
 
+          if (transform === "year") {
+            runtime.placeholder = "年";
+            console.log("识别转换 year -> 年");
+          } else if (transform === "month") {
+            runtime.placeholder = "月";
+            console.log("识别转换 month -> 月");
+          }
+        }
+        console.log("[content.js 371] runtime::", runtime);
+        // 在这里，填充单个元素，这里才真的开始，前面就检查
         const fillResult = await fillOne(runtime, finalValue);
         sendLog(
-          fillResult.filled ? "success" : "warning",
+          fillResult?.filled ? "success" : "warning",
           diagnostics.formatFillSummary({
             field,
             mapping,
@@ -358,11 +382,11 @@
             fillResult,
           })
         );
-        if (fillResult.filled) {
+        if (fillResult?.filled) {
           filledCount += 1;
         }
       }
-
+      // 填充结果
       lastFilledCount = filledCount;
       sendStats(lastFieldCount, lastMappedCount, lastFilledCount);
       sendLog(
@@ -401,11 +425,16 @@
     fields.forEach(f => {
       if (f.fieldId) {
         // 给重复的label加上序号标识
-        let label = `${f.label}+${f?.context}+${f?.sectionEvidence}+${f?.sectionLabel}`;
-        f?.nearbyLabels.forEach(nbLabel => {
-          label += `+${nbLabel}`;
-        });
-        fieldMap[`${f.fieldId}`] = label;
+        // let label = `${f.label}+${f?.context}+${f?.sectionEvidence}+${f?.sectionLabel}`;
+        // f?.nearbyLabels.forEach(nbLabel => {
+        //   label += `+${nbLabel}`;
+        // });
+        let fieldArrary = [];
+        fieldArrary.push(f?.label);
+        fieldArrary.push(f?.placeholder);
+        fieldArrary.push(f?.sectionLabel);
+        fieldArrary.push(f?.nearbyLabels);
+        fieldMap[`${f.fieldId}`] = fieldArrary;
         // if (fieldMap[f.fieldId]) {
         // // 如果已存在，追加标识
         // fieldMap[f.fieldId] = label + (f.sectionKey ? ` (${f.sectionKey})` : '');
@@ -448,41 +477,49 @@
   }
 
   function normalizeTransform(transform) {
-    if (!transform || typeof transform !== "object") {
+    if (!transform) {
       return { type: "none" };
     }
 
-    const type = String(transform.type || "none").trim();
+    if (typeof transform !== "object") {
+      if (typeof transform == "string") {
+        return transform;
+      }
 
-    if (type === "date_part") {
-      const part = ["year", "month", "day"].includes(transform.part)
-        ? transform.part
-        : "year";
-      return { type, part };
+    } else {
+
+      const type = String(transform.type || "none").trim();
+
+      if (type === "date_part") {
+        const part = ["year", "month", "day"].includes(transform.part)
+          ? transform.part
+          : "year";
+        return { type, part };
+      }
+
+      if (type === "phone_part") {
+        const part =
+          transform.part === "countryCode" ? "countryCode" : "nationalNumber";
+        return { type, part };
+      }
+
+      if (type === "boolean_choice") {
+        return {
+          type,
+          trueValue: String(transform.trueValue ?? "Yes"),
+          falseValue: String(transform.falseValue ?? "No"),
+        };
+      }
+
+      if (type === "join") {
+        return {
+          type,
+          separator: String(transform.separator || ", "),
+        };
+      }
+
+      return { type: "none" };
     }
-
-    if (type === "phone_part") {
-      const part =
-        transform.part === "countryCode" ? "countryCode" : "nationalNumber";
-      return { type, part };
-    }
-
-    if (type === "boolean_choice") {
-      return {
-        type,
-        trueValue: String(transform.trueValue ?? "Yes"),
-        falseValue: String(transform.falseValue ?? "No"),
-      };
-    }
-
-    if (type === "join") {
-      return {
-        type,
-        separator: String(transform.separator || ", "),
-      };
-    }
-
-    return { type: "none" };
   }
 
   function deriveFillValue(rawValue, transform, runtime) {
@@ -698,229 +735,18 @@
     let idSeq = 0;
     const radioGroups = new Map();
     const checkboxGroups = new Map();
+    const groupOrder = [];
 
-    for (const el of elements) {
-      if (!isFillableElement(el)) continue;
-      if (isAtsxPeriodMonthHiddenInput(el)) continue;
+    // 收集所有 ATSX 控件，并记录它们的位置
+    const atsxControls = collectAtsxPeriodMonthControls(root);
+    const atsxMap = new Map(); // container -> control info
 
-      const tag = el.tagName.toLowerCase();
-      const baseInputType = tag === "input"
-        ? String(el.getAttribute("type") || "text").toLowerCase()
-        : "";
-      const semanticMeta = buildFieldSemanticMeta(el, {
-        kind: tag === "textarea" ? "textarea" : tag === "select" ? "select" : "text",
-        inputType: baseInputType,
-      });
-      const commonMeta = {
-        required: Boolean(el.required || el.getAttribute("aria-required") === "true"),
-        context: semanticMeta.context,
-        sectionKey: semanticMeta.sectionKey,
-        sectionLabel: semanticMeta.sectionLabel,
-        sectionEvidence: semanticMeta.sectionEvidence,
-        nearbyLabels: semanticMeta.nearbyLabels,
-      };
-
-      if (tag === "select") {
-        const fieldId = `f_${++idSeq}`;
-        const options = Array.from(el.options || [])
-          .map((opt) => String(opt.textContent || "").trim())
-          .filter(Boolean)
-          .slice(0, 60);
-
-        fields.push({
-          fieldId,
-          kind: "select",
-          label: semanticMeta.label,
-          name: el.getAttribute("name") || "",
-          id: el.id || "",
-          placeholder: "",
-          options,
-          ...commonMeta,
-        });
-
-        runtime.push({ fieldId, kind: "select", el });
-        continue;
-      }
-
-      if (tag === "textarea") {
-        const fieldId = `f_${++idSeq}`;
-        fields.push({
-          fieldId,
-          kind: "textarea",
-          label: semanticMeta.label,
-          name: el.getAttribute("name") || "",
-          id: el.id || "",
-          placeholder: el.getAttribute("placeholder") || "",
-          ...commonMeta,
-        });
-
-        runtime.push({ fieldId, kind: "textarea", el });
-        continue;
-      }
-
-      const isContentEditable =
-        el.getAttribute("contenteditable") === "true" ||
-        el.getAttribute("contenteditable") === "";
-      if (isContentEditable) {
-        const fieldId = `f_${++idSeq}`;
-        fields.push({
-          fieldId,
-          kind: "contenteditable",
-          label: semanticMeta.label,
-          name: el.getAttribute("name") || "",
-          id: el.id || "",
-          placeholder: el.getAttribute("placeholder") || "",
-          ...commonMeta,
-        });
-
-        runtime.push({ fieldId, kind: "contenteditable", el });
-        continue;
-      }
-
-      if (tag !== "input") continue;
-
-      const type = baseInputType;
-      if (
-        ["hidden", "submit", "button", "reset", "image", "range", "color"].includes(type)
-      ) {
-        continue;
-      }
-
-      if (type === "file") {
-        const fieldId = `f_${++idSeq}`;
-        fields.push({
-          fieldId,
-          kind: "file",
-          label: semanticMeta.label,
-          name: el.getAttribute("name") || "",
-          id: el.id || "",
-          placeholder: "",
-          inputType: type,
-          ...commonMeta,
-        });
-
-        runtime.push({ fieldId, kind: "file", inputType: type, el });
-        continue;
-      }
-
-      if (type === "radio" || type === "checkbox") {
-        const name = el.getAttribute("name") || el.id || "";
-        const groupKey = `${type}:${name || "(no-name)"}`;
-        const groupMap = type === "radio" ? radioGroups : checkboxGroups;
-
-        if (!groupMap.has(groupKey)) {
-          const groupMeta = buildFieldSemanticMeta(el, {
-            kind: type === "radio" ? "radio_group" : "checkbox_group",
-            inputType: type,
-          });
-          groupMap.set(groupKey, {
-            type,
-            name,
-            elements: [],
-            label: groupMeta.label || getGroupLabel(el),
-            context: groupMeta.context,
-            sectionKey: groupMeta.sectionKey,
-            sectionLabel: groupMeta.sectionLabel,
-            sectionEvidence: groupMeta.sectionEvidence,
-            nearbyLabels: groupMeta.nearbyLabels,
-          });
-        }
-
-        groupMap.get(groupKey).elements.push(el);
-        continue;
-      }
-
-      const fieldId = `f_${++idSeq}`;
-      fields.push({
-        fieldId,
-        kind: "text",
-        inputType: type,
-        label: semanticMeta.label,
-        name: el.getAttribute("name") || "",
-        id: el.id || "",
-        placeholder: el.getAttribute("placeholder") || "",
-        autocomplete: el.getAttribute("autocomplete") || "",
-        ...commonMeta,
-      });
-
-      runtime.push(buildTextLikeRuntime(fieldId, el, type, semanticMeta));
+    for (const control of atsxControls) {
+      atsxMap.set(control.container, control);
     }
 
-    for (const group of radioGroups.values()) {
-      const fieldId = `f_${++idSeq}`;
-      const options = group.elements
-        .map((input) => ({
-          label: getOptionLabel(input),
-          value: input.value || "",
-        }))
-        .filter((item) => item.label || item.value)
-        .slice(0, 80);
-
-      fields.push({
-        fieldId,
-        kind: "radio_group",
-        label: group.label,
-        name: group.name,
-        options: options.map((item) => item.label || item.value),
-        context: group.context,
-        sectionKey: group.sectionKey,
-        sectionLabel: group.sectionLabel,
-        sectionEvidence: group.sectionEvidence,
-        nearbyLabels: group.nearbyLabels,
-        required: group.elements.some(
-          (input) => input.required || input.getAttribute("aria-required") === "true"
-        ),
-      });
-
-      runtime.push({
-        fieldId,
-        kind: "radio_group",
-        options: group.elements.map((input) => ({
-          el: input,
-          label: getOptionLabel(input) || input.value || "",
-          value: input.value || "",
-        })),
-      });
-    }
-
-    for (const group of checkboxGroups.values()) {
-      const fieldId = `f_${++idSeq}`;
-      const options = group.elements
-        .map((input) => ({
-          label: getOptionLabel(input),
-          value: input.value || "",
-        }))
-        .filter((item) => item.label || item.value)
-        .slice(0, 80);
-
-      fields.push({
-        fieldId,
-        kind: "checkbox_group",
-        label: group.label,
-        name: group.name,
-        options: options.map((item) => item.label || item.value),
-        context: group.context,
-        sectionKey: group.sectionKey,
-        sectionLabel: group.sectionLabel,
-        sectionEvidence: group.sectionEvidence,
-        nearbyLabels: group.nearbyLabels,
-        required: group.elements.some(
-          (input) => input.required || input.getAttribute("aria-required") === "true"
-        ),
-      });
-
-      runtime.push({
-        fieldId,
-        kind: "checkbox_group",
-        options: group.elements.map((input) => ({
-          el: input,
-          label: getOptionLabel(input) || input.value || "",
-          value: input.value || "",
-        })),
-      });
-    }
-
-    for (const control of collectAtsxPeriodMonthControls(root)) {
+    // 处理 ATSX 控件的函数
+    function processAtsxControl(control) {
       const meta = buildFieldSemanticMeta(control.container, {
         kind: "text",
         inputType: "date",
@@ -935,9 +761,7 @@
         nearbyLabels: meta.nearbyLabels,
       };
 
-      // 注意：同一容器内先填 end、再填 begin。
-      // 打开任一面板时组件会同时创建两个面板（另一个 hidden），
-      // 先填 end 可减少 begin 填充时被面板并存状态干扰。
+      // 先添加 end
       const endId = `f_${++idSeq}`;
       const endLabel = baseLabel ? `${baseLabel}（结束）` : "结束时间";
       fields.push({
@@ -966,6 +790,7 @@
         hasCalendarIcon: true,
       });
 
+      // 后添加 begin
       const beginId = `f_${++idSeq}`;
       const beginLabel = baseLabel ? `${baseLabel}（开始）` : "开始时间";
       fields.push({
@@ -995,6 +820,240 @@
       });
     }
 
+    // 主遍历
+    for (const el of elements) {
+      if (!isFillableElement(el)) continue;
+      if (isAtsxPeriodMonthHiddenInput(el)) {
+        // 检查这个隐藏 input 是否属于某个 ATSX 控件
+        const container = el.closest?.(".atsx-date-picker-period-month");
+        if (container && atsxMap.has(container)) {
+          // 从 Map 中取出并处理
+          const control = atsxMap.get(container);
+          atsxMap.delete(container); // 移除已处理的
+          processAtsxControl(control);
+        }
+        continue;
+      }
+
+      const tag = el.tagName.toLowerCase();
+      const baseInputType = tag === "input"
+        ? String(el.getAttribute("type") || "text").toLowerCase()
+        : "";
+      const semanticMeta = buildFieldSemanticMeta(el, {
+        kind: tag === "textarea" ? "textarea" : tag === "select" ? "select" : "text",
+        inputType: baseInputType,
+      });
+      const commonMeta = {
+        required: Boolean(el.required || el.getAttribute("aria-required") === "true"),
+        context: semanticMeta.context,
+        sectionKey: semanticMeta.sectionKey,
+        sectionLabel: semanticMeta.sectionLabel,
+        sectionEvidence: semanticMeta.sectionEvidence,
+        nearbyLabels: semanticMeta.nearbyLabels,
+      };
+
+      // 处理 select
+      if (tag === "select") {
+        const fieldId = `f_${++idSeq}`;
+        const options = Array.from(el.options || [])
+          .map((opt) => String(opt.textContent || "").trim())
+          .filter(Boolean)
+          .slice(0, 60);
+
+        fields.push({
+          fieldId,
+          kind: "select",
+          label: semanticMeta.label,
+          name: el.getAttribute("name") || "",
+          id: el.id || "",
+          placeholder: "",
+          options,
+          ...commonMeta,
+        });
+
+        runtime.push({ fieldId, kind: "select", el });
+        continue;
+      }
+
+      // 处理 textarea
+      if (tag === "textarea") {
+        const fieldId = `f_${++idSeq}`;
+        fields.push({
+          fieldId,
+          kind: "textarea",
+          label: semanticMeta.label,
+          name: el.getAttribute("name") || "",
+          id: el.id || "",
+          placeholder: el.getAttribute("placeholder") || "",
+          ...commonMeta,
+        });
+
+        runtime.push({ fieldId, kind: "textarea", el });
+        continue;
+      }
+
+      // 处理 contenteditable
+      const isContentEditable =
+        el.getAttribute("contenteditable") === "true" ||
+        el.getAttribute("contenteditable") === "";
+      if (isContentEditable) {
+        const fieldId = `f_${++idSeq}`;
+        fields.push({
+          fieldId,
+          kind: "contenteditable",
+          label: semanticMeta.label,
+          name: el.getAttribute("name") || "",
+          id: el.id || "",
+          placeholder: el.getAttribute("placeholder") || "",
+          ...commonMeta,
+        });
+
+        runtime.push({ fieldId, kind: "contenteditable", el });
+        continue;
+      }
+
+      // 只处理 input
+      if (tag !== "input") continue;
+
+      const type = baseInputType;
+      if (
+        ["hidden", "submit", "button", "reset", "image", "range", "color"].includes(type)
+      ) {
+        continue;
+      }
+
+      // 处理 file
+      if (type === "file") {
+        const fieldId = `f_${++idSeq}`;
+        fields.push({
+          fieldId,
+          kind: "file",
+          label: semanticMeta.label,
+          name: el.getAttribute("name") || "",
+          id: el.id || "",
+          placeholder: "",
+          inputType: type,
+          ...commonMeta,
+        });
+
+        runtime.push({ fieldId, kind: "file", inputType: type, el });
+        continue;
+      }
+
+      // 处理 radio 和 checkbox
+      if (type === "radio" || type === "checkbox") {
+        const name = el.getAttribute("name") || el.id || "";
+        const groupKey = `${type}:${name || "(no-name)"}`;
+        const groupMap = type === "radio" ? radioGroups : checkboxGroups;
+
+        if (!groupMap.has(groupKey)) {
+          const groupMeta = buildFieldSemanticMeta(el, {
+            kind: type === "radio" ? "radio_group" : "checkbox_group",
+            inputType: type,
+          });
+
+          const fieldId = `f_${++idSeq}`;
+          const groupInfo = {
+            type,
+            name,
+            fieldId,
+            elements: [],
+            label: groupMeta.label || getGroupLabel(el),
+            context: groupMeta.context,
+            sectionKey: groupMeta.sectionKey,
+            sectionLabel: groupMeta.sectionLabel,
+            sectionEvidence: groupMeta.sectionEvidence,
+            nearbyLabels: groupMeta.nearbyLabels,
+            required: false,
+          };
+
+          fields.push({
+            fieldId,
+            kind: type === "radio" ? "radio_group" : "checkbox_group",
+            label: groupInfo.label,
+            name: groupInfo.name,
+            options: [],
+            context: groupInfo.context,
+            sectionKey: groupInfo.sectionKey,
+            sectionLabel: groupInfo.sectionLabel,
+            sectionEvidence: groupInfo.sectionEvidence,
+            nearbyLabels: groupInfo.nearbyLabels,
+            required: false,
+          });
+
+          runtime.push({
+            fieldId,
+            kind: type === "radio" ? "radio_group" : "checkbox_group",
+            options: [],
+          });
+
+          groupMap.set(groupKey, groupInfo);
+          groupOrder.push({ groupKey, type, fieldId });
+        }
+
+        const groupInfo = groupMap.get(groupKey);
+        groupInfo.elements.push(el);
+        continue;
+      }
+
+      // 处理普通文本输入
+      const fieldId = `f_${++idSeq}`;
+      fields.push({
+        fieldId,
+        kind: "text",
+        inputType: type,
+        label: semanticMeta.label,
+        name: el.getAttribute("name") || "",
+        id: el.id || "",
+        placeholder: el.getAttribute("placeholder") || "",
+        autocomplete: el.getAttribute("autocomplete") || "",
+        ...commonMeta,
+      });
+
+      runtime.push(buildTextLikeRuntime(fieldId, el, type, semanticMeta));
+    }
+
+    // 处理剩余的 ATSX 控件（如果没有对应的隐藏 input 被遍历到）
+    for (const control of atsxMap.values()) {
+      processAtsxControl(control);
+    }
+
+    // 填充 radio 和 checkbox 组的 options
+    for (const { groupKey, type, fieldId } of groupOrder) {
+      const groupMap = type === "radio" ? radioGroups : checkboxGroups;
+      const groupInfo = groupMap.get(groupKey);
+      if (!groupInfo) continue;
+
+      const options = groupInfo.elements
+        .map((input) => ({
+          label: getOptionLabel(input),
+          value: input.value || "",
+        }))
+        .filter((item) => item.label || item.value)
+        .slice(0, 80);
+
+      const optionLabels = options.map((item) => item.label || item.value);
+      const required = groupInfo.elements.some(
+        (input) => input.required || input.getAttribute("aria-required") === "true"
+      );
+
+      const fieldIndex = fields.findIndex(f => f.fieldId === fieldId);
+      if (fieldIndex !== -1) {
+        fields[fieldIndex].options = optionLabels;
+        fields[fieldIndex].required = required;
+      }
+
+      const runtimeIndex = runtime.findIndex(r => r.fieldId === fieldId);
+      if (runtimeIndex !== -1) {
+        runtime[runtimeIndex].options = groupInfo.elements.map((input) => ({
+          el: input,
+          label: getOptionLabel(input) || input.value || "",
+          value: input.value || "",
+        }));
+      }
+    }
+
+    // 处理 selection 过滤
     if (scope === "selection" && selectionRect) {
       const allowedFieldIds = new Set();
 
@@ -1513,10 +1572,10 @@
     }
     return result;
   }
-  // 填写元素控件
+  // 在这里，填写单个元素控件
   async function doFillOne(runtime, value) {
     if (!runtime) return { filled: false, message: "字段不存在" };
-    console.log(runtime.el, "rekind", runtime.kind, "path", runtime.resumePath);
+    console.log("[简历填表助手] RunTime::", runtime.el, "kind类型", runtime.kind, "trans", runtime?.placeholder, "映射路径", runtime.resumePath);
     if (runtime.kind === "file") {
       return { filled: false, message: "文件上传字段无法自动填写" };
     }
@@ -1602,17 +1661,22 @@
 
 
     // Phoenix日期控件通用适配
-    if (String(runtime.resumePath).includes("Date") && isPhoenixLike(runtime.el)) {
+    if ( isPhoenixLike(runtime.el) && String(runtime.resumePath).toLowerCase().includes("date") ) {
+      console.log("[简历填表助手] Phoenix控件:", runtime.el, "映射路径", runtime.resumePath);
       const ok = await fillPhSelect(runtime, desired);
       await sleep(200);
-      if (ok) return { filled: true };
+      // 适配平台不论成功，都不再继续
+      return { filled: true };
     }
 
     // Moka（mokahr）控件通用适配
     if (isMokaSelectLike(runtime.el)) {
+      console.log("[简历填表助手] MoKa控件:", runtime.el, "映射路径", runtime.resumePath);
       const ok = await fillMokaSelect(runtime, desired);
       if (ok) return { filled: true };
       await dismissMokaDropdown();
+      return { filled: true };
+
     }
 
     if (fillRuntime.isReadonlyDateLikeRuntime(runtime)) {
@@ -1622,17 +1686,18 @@
 
     // 通用控件适配（所有网站，不依赖特定框架 class）：
     if (// 暂时废弃
-      // !isDateLikeField(runtime) &&
-      // !isAtsxControl(runtime.el) &&
+      !isDateLikeField(runtime) &&
+      !isAtsxControl(runtime.el) &&
       findClickActivator(runtime.el)
-    ) {
+    ) {// 不是适配平台，且存在click()
       console.log("通用激活控件：", runtime.el);
       const ok = await fillGeneric(runtime, desired);
       if (ok) return { filled: true };
+    } else {
+      console.log("正常输入控件：", runtime.el);
+      const ok = await setValueWithEvents(runtime.el, desired, runtime);
+      return ok ? { filled: true } : { filled: false, message: "写入失败" };
     }
-    console.log("正常输入控件：", runtime.el);
-    const ok = await setValueWithEvents(runtime.el, desired, runtime);
-    return ok ? { filled: true } : { filled: false, message: "写入失败" };
   }
 
   function prepareTextValueForRuntime(runtime, value) {
@@ -1765,7 +1830,7 @@
       // 填值后触发 invalid（并执行约束校验），让组件把脚本写入的值同步为内部 state。
       if (1) {// 无论是谁，都尝试调用invalid
         dispatchInvalidEvent(el);
-        
+
       }
 
       el.blur?.();
@@ -1964,12 +2029,16 @@
     return true;
   }
 
+  function astxLog(logString) {
+    // 调试 astxlog
+    //console.log(EXT_TAG, `${logString}`);
+  }
+
   async function fillAtsxPeriodMonth(runtime, desired) {
     logDateFillStep(runtime, "开始", `目标值=${desired}`);
 
     const parsed = parseDateParts(desired);
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 字段: ${runtime?.label || runtime?.fieldId || "(未命名)"} | 要填写的值 desired = ${desired} | 解析结果 = year=${parsed.year} month=${parsed.month}`
     );
     if (!parsed.year || !parsed.month) {
@@ -1982,8 +2051,7 @@
       logDateFillStep(runtime, "未找到对应标签");
       return false;
     }
-    console.log(
-      EXT_TAG,
+    astxLog(
       "[atsx] 定位到标签:",
       targetLabel,
       "data-cy =",
@@ -1997,8 +2065,7 @@
 
     // 打开面板可能带短暂 hidden 状态（组件移除 hidden class 有延迟），重试等待
     let panel = await findAtsxPeriodPanelWithRetry(targetLabel, null, 5, 120);
-    console.log(
-      EXT_TAG,
+    astxLog(
       "[atsx] 点击标签后查找面板:",
       panel ? String(panel.getAttribute?.("data-cy") || panel.className || panel.tagName) : "未找到"
     );
@@ -2023,19 +2090,16 @@
     // 必须重试重查新面板，不能直接复用旧引用；再等组件把所点年份标记为选中
     // （-selected class 出现），确认组件已处理年份点击后再进入月份阶段。
     panel = await findAtsxPeriodPanelWithRetry(targetLabel, panel);
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 点击年份后重查面板: ${panel ? String(panel.getAttribute?.("data-cy") || panel.className || panel.tagName) : "未找到（沿用旧面板）"}`
     );
     const yearConfirmed = await waitForAtsxYearSelected(panel, String(parsed.year));
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 年份 ${parsed.year} 选中确认: ${yearConfirmed ? "已选中" : "未确认（仍继续尝试月份）"}`
     );
 
     const month2 = String(parsed.month).padStart(2, "0");
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 准备填写月份: parsed.month = ${parsed.month} | 要匹配的目标 data-cy/text = ${month2}`
     );
 
@@ -2229,8 +2293,7 @@
       }
     }
 
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] findAtsxPeriodPanel(全局) 候选面板数 = ${candidates.length} [${candidates
         .map((node) => String(node.getAttribute?.("data-cy") || node.className || node.tagName))
         .join(", ")}]`
@@ -2302,8 +2365,7 @@
 
     // 内容特征分类：年份列表 / 月份列表（列表可能被组件部分删除）
     const kinds = lists.map((list) => classifyAtsxList(list));
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 面板项点击: 目标值 = ${target}（${isYear ? "年份" : isMonth ? "月份" : "其他"}）| 列表容器 ${lists.length} 个，类型 = [${kinds.join(", ")}]`
     );
 
@@ -2376,8 +2438,7 @@
     const targetSnapshot = `data-cy=${String(targetItem.getAttribute?.("data-cy") || "")} 文本=${String(
       targetItem.textContent || ""
     ).trim()}`;
-    console.log(
-      EXT_TAG,
+    astxLog(
       `[atsx] 命中并点击: 目标值 = ${target} | 区段 = ${usedScope} | 元素 = ${targetSnapshot}`
     );
 
@@ -2754,7 +2815,7 @@
   function getMokaPartValue(runtime, desired) {
     const text = String(desired ?? "").trim();
     if (!text) return "";
-    const hint = String(runtime?.placeholder || runtime?.label || "");
+    const hint = String(runtime?.placeholder || "");
     const isYear = /年|year/i.test(hint);
     const isMonth = /月|month/i.test(hint);
     const isDay = /日|天|day/i.test(hint);
@@ -2802,7 +2863,7 @@
   async function fillMokaSelect(runtime, desired) {
     const el = runtime?.el;
     if (!el) return false;
-
+    console.log("[content.js 2835]:", runtime)
     // 自动分辨年/月/日：从映射值提取本控件对应的面板匹配目标
     const targetValue = getMokaPartValue(runtime, desired);
     if (!targetValue) return false;

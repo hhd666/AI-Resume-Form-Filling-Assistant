@@ -1959,7 +1959,7 @@ chrome.runtime.onMessage.addListener((message) => {
       addLog("error", message.text || "未知错误");
       break;
     case "aiStream":
-      handleAiStreamMessage(message);
+      // handleAiStreamMessage(message);
       break;
     default:
       break;
@@ -1973,13 +1973,6 @@ let aiStreamDone = false;
 function handleAiStreamMessage(message) {
   if (message.done) {
     aiStreamDone = true;
-    aiStreamItem = document.createElement("div");
-    aiStreamItem.className = "log-item log-ai-stream";
-    aiStreamItem.innerHTML = `<span class="log-time">${time}</span><span class="log-msg"></span>`;
-    logContent.appendChild(aiStreamItem);
-    const msgEl = aiStreamItem.querySelector(".log-msg");
-    msgEl.textContent += `\nAI思考总时长: ${aiThinkingSec}秒`;
-    logContent.scrollTop = logContent.scrollHeight;
     return;
   }
   const delta = String(message.delta || "");
