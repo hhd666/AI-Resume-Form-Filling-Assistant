@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AI简历填表助手",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "粘贴简历文本，AI解析并自动填写网页表单（不自动提交）",
   "permissions": [
     "activeTab",
@@ -34,6 +34,7 @@
         "shared/field-semantics.js",
         "shared/fill-runtime.js",
         "shared/content-bridge.js",
+        "platform-fillers.js",
         "content.js"
       ],
       "css": ["content.css"]
