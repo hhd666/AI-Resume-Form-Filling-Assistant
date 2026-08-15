@@ -172,7 +172,7 @@
               : "未识别到可填写字段，请确认当前页面包含表单",
         };
       }
-      console.log("resumeProfile:", scan.fields, resumeProfile);
+      console.log(EXT_TAG,"表单和简历扫描:", scan.fields, resumeProfile);
 
       const cacheSignature = createMappingCacheSignature(scan.fields);
       const cacheKey = createMappingCacheKeyFromSignature(cacheSignature);
@@ -188,7 +188,7 @@
       if (cachedEntry?.mappings?.length) {
         mappings = cachedEntry.mappings;
         cacheHit = true;
-        console.log("命中本地缓存:", mappings);
+        console.log(EXT_TAG,"命中本地缓存:", mappings);
         sendLog("info", "已命中本地字段映射缓存，跳过模型调用。");
       } else {// 无本地缓存
         sendLog("info", `[缓存] 未命中 reason="${cacheLookup.reason || "未知原因"}"`);
@@ -363,13 +363,13 @@
 
           if (transform === "year") {
             runtime.placeholder = "年";
-            console.log("识别转换 year -> 年");
+            //console.log("识别转换 year -> 年");
           } else if (transform === "month") {
             runtime.placeholder = "月";
-            console.log("识别转换 month -> 月");
+            //console.log("识别转换 month -> 月");
           }
         }
-        console.log("[content.js 371] runtime::", runtime);
+        // console.log(EXT_TAG,"", runtime);
         // 在这里，填充单个元素，这里才真的开始，前面就检查
         const fillResult = await fillOne(runtime, finalValue);
         sendLog(
@@ -1575,7 +1575,7 @@
   // 在这里，填写单个元素控件
   async function doFillOne(runtime, value) {
     if (!runtime) return { filled: false, message: "字段不存在" };
-    console.log("[简历填表助手] RunTime::", runtime.el, "kind类型", runtime.kind, "trans", runtime?.placeholder, "映射路径", runtime.resumePath);
+    console.log(EXT_TAG,"当前元素:", runtime.el, "kind类型", runtime.kind, "映射路径", runtime.resumePath);
     if (runtime.kind === "file") {
       return { filled: false, message: "文件上传字段无法自动填写" };
     }
@@ -1662,7 +1662,7 @@
 
     // Phoenix日期控件通用适配
     if ( isPhoenixLike(runtime.el) && String(runtime.resumePath).toLowerCase().includes("date") ) {
-      console.log("[简历填表助手] Phoenix控件:", runtime.el, "映射路径", runtime.resumePath);
+      phoenixLog(" 发现北森日期控件:", runtime.el, "映射路径", runtime.resumePath);
       const ok = await fillPhSelect(runtime, desired);
       await sleep(200);
       // 适配平台不论成功，都不再继续
@@ -1671,7 +1671,7 @@
 
     // Moka（mokahr）控件通用适配
     if (isMokaSelectLike(runtime.el)) {
-      console.log("[简历填表助手] MoKa控件:", runtime.el, "映射路径", runtime.resumePath);
+      astxLog("[简历填表助手] MoKa控件:", runtime.el, "映射路径", runtime.resumePath);
       const ok = await fillMokaSelect(runtime, desired);
       if (ok) return { filled: true };
       await dismissMokaDropdown();
@@ -1686,9 +1686,10 @@
 
     // 通用控件适配（所有网站，不依赖特定框架 class）：
     if (// 暂时废弃
-      !isDateLikeField(runtime) &&
-      !isAtsxControl(runtime.el) &&
-      findClickActivator(runtime.el)
+      // !isDateLikeField(runtime) &&
+      // !isAtsxControl(runtime.el) &&
+      // findClickActivator(runtime.el)
+      0
     ) {// 不是适配平台，且存在click()
       console.log("通用激活控件：", runtime.el);
       const ok = await fillGeneric(runtime, desired);
@@ -1830,6 +1831,7 @@
       // 填值后触发 invalid（并执行约束校验），让组件把脚本写入的值同步为内部 state。
       if (1) {// 无论是谁，都尝试调用invalid
         dispatchInvalidEvent(el);
+        el.click?.();// 关闭
 
       }
 
@@ -2029,9 +2031,19 @@
     return true;
   }
 
+  function phoenixLog(logString) {
+    // 调试 astxlog
+    //console.log(EXT_TAG,"[北森平台]", `${logString}`);
+  }
+
   function astxLog(logString) {
     // 调试 astxlog
-    //console.log(EXT_TAG, `${logString}`);
+    //console.log(EXT_TAG,"[飞书平台]", `${logString}`);
+  }
+
+  function logWithAts(platform, logstring) {
+    // 调试适配平台
+    // console.log(EXT_TAG,`[${platform}平台] `, `${logString}`);
   }
 
   async function fillAtsxPeriodMonth(runtime, desired) {
@@ -2080,7 +2092,7 @@
       `year=${parsed.year} month=${parsed.month}`
     );
 
-    console.log(EXT_TAG, `[atsx] 准备填写年份: 目标值 = ${String(parsed.year)}`);
+    logWithAts("飞书", `准备填写年份: 目标值 = ${String(parsed.year)}`);
     if (!(await clickAtsxPeriodItem(panel, String(parsed.year)))) {
       logDateFillStep(runtime, "年份点击失败", String(parsed.year));
       return false;
@@ -2642,7 +2654,8 @@
     // 找年月日输入框
     var ymdInput = picker.querySelector('.phoenix-calendar-input')
     if (ymdInput) {
-      selectPhoenixDate(ymdInput, dataStr.string)
+      console.log('找到年月日选择面板');
+      selectPhoenixDate(ymdInput, dataStr.string);
       return;
     }
     // 没有就找月份面板
@@ -2651,6 +2664,7 @@
       console.error('未找到月份选择面板');
       return;
     }
+    console.log('找到phoenix年月选择面板');
     // 5. 获取当前显示的年月
     var yearSelect = monthPanel.querySelector('.phoenix-calendar-month-panel-year-select .phoenix-calendar-month-panel-year-select-content');
     var currentYear = parseInt(yearSelect.textContent.trim());
@@ -2662,32 +2676,36 @@
     var prevYearBtn = monthPanel.querySelector('.phoenix-calendar-month-panel-prev-year-btn');
     var nextYearBtn = monthPanel.querySelector('.phoenix-calendar-month-panel-next-year-btn');
 
+    console.log("目标年份:", year)
+    async function WaitTargetYear(monthPan,targetYear) {
+      for (let index = 0; index < 20; index++) {
+        let titleYear = monthPanel.querySelector('.phoenix-calendar-month-panel-year-select-content').innerHTML;
+        if (titleYear.includes(targetYear)) {
+          break;
+        }
+        sleep(50);
+      }
+      return 0;
+    }
     // 7. 调整年份
     if (yearDiff > 0) {
       // 需要减小年份
       for (var i = 0; i < yearDiff; i++) {
         prevYearBtn.click();
-        await sleep(100);
+        await WaitTargetYear(monthPanel,currentYear+yearDiff);
       }
     } else if (yearDiff < 0) {
       // 需要增加年份
       for (var i = 0; i < Math.abs(yearDiff); i++) {
-        nextYearBtn.click();
-        await sleep(100);
+        nextYearBtn.click(currentYear+yearDiff);
+        await WaitTargetYear(monthPanel,currentYear+yearDiff);
       }
     }
     // 8. 选择月份
     var monthCells = monthPanel.querySelectorAll('.phoenix-calendar-month-panel-cell');
     var targetMonthText = month + '月';
-    console.log("目标月份:", targetMonthText)
-    for (var i = 0; i < monthCells.length; i++) {
-      var monthLink = monthCells[i].querySelector('.phoenix-calendar-month-panel-month');
-      if (monthLink && monthLink.textContent.trim() === targetMonthText) {
-        monthLink.click();
-        await sleep(100);
-        break;
-      }
-    }
+    console.log("目标月份:", targetMonthText);
+    monthCells[month-1]?.click()
   }
 
   function selectPhoenixDate(input, dateStr) {
@@ -2738,7 +2756,7 @@
     month = Number(month);
     var dateMap = { y: year, m: month, d: day, string: text };
     el.focus();
-    el.click();
+    el.click();// 展开日期面板
     console.log("ph年月日结果", el, dateMap);
     await sleep(200);
     await selectPhoenixRuntime(dateMap);
