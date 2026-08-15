@@ -34,6 +34,9 @@
         "shared/field-semantics.js",
         "shared/fill-runtime.js",
         "shared/content-bridge.js",
+        "shared/dom-ops.js",
+        "shared/field-detector.js",
+        "shared/fill-engine.js",
         "content.js"
       ],
       "css": ["content.css"]
